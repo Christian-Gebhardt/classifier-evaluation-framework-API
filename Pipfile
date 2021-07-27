@@ -1,0 +1,19 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+flask = "*"
+flask-sqlalchemy = "*"
+marshmallow-sqlalchemy = "*"
+flask-marshmallow = "*"
+scikit-learn = "*"
+numpy = "*"
+pandas = "*"
+flask-cors = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.9"
