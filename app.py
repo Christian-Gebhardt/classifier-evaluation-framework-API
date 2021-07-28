@@ -32,7 +32,7 @@ def greeting():
 @app.route("/evaluate", methods=['GET', 'POST'])
 def evaluate():
     # Case own classifier is selected, check if all necessary params are in HTTP request
-    if 'y_true' in request.files and 'y_pred' in request.files and request.form.getlist('metrics[]'): 
+    if 'y_true' in request.files and 'y_pred' in request.files and request.form.getlist('metrics[]') and request.form.get("metricType"): 
         y_true_file = TemporaryFile()
         y_pred_file = TemporaryFile()
         metrics = request.form.getlist('metrics[]')
@@ -43,8 +43,20 @@ def evaluate():
         _ = y_pred_file.seek(0) # Only needed here to simulate closing & reopening file
         y_pred = np.load(y_pred_file)
         
-        results, cnf_matrices, clf_reports = evaluate_input(y_true=y_true, y_pred=y_pred, metrics=metrics)
-        return {'results': results, 'cnf_matrices': cnf_matrices, 'clf_reports': clf_reports}
+        # Case qualitative metrics
+        if request.form.get("metricType") == "qualitative":
+            results, cnf_matrices, clf_reports = evaluate_input(y_true=y_true, y_pred=y_pred, metrics=metrics)
+            return {'results': results, 'cnf_matrices': cnf_matrices, 'clf_reports': clf_reports}
+        # Case probabilistic metrics
+        else:
+            results, cnf_matrices, clf_reports = evaluate_input(y_true=y_true, y_pred=y_pred, metrics=metrics, metricType="probabilistic")
+            # Case ROC image
+            if request.form.get("roc"):
+                roc_dict = plot_multiclass_roc(y_true=y_true, y_proba=y_pred, n_classes=len(np.unique(y_true)))
+                return {'results': results, 'cnf_matrices': cnf_matrices, 'clf_reports': clf_reports, 'roc_analysis': roc_dict}
+            # Case no ROC image
+            else:
+                return {'results': results, 'cnf_matrices': cnf_matrices, 'clf_reports': clf_reports}
     # Case wrong params
     else: 
         return { "message": "Incorrect parameters, mandatory params are: y_true.npy, y_pred.npy, metrics (list)"}

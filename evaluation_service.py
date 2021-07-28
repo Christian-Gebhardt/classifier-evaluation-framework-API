@@ -1,3 +1,4 @@
+from tempfile import TemporaryFile
 from sklearn.linear_model import SGDClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
@@ -6,6 +7,8 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import *
 from sklearn.model_selection import StratifiedKFold
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 ''' @author Christian Gebhardt, christian.gebhardt@uni-bayreuth.de
 This is the evaluation_service.py file, all computations that are needed for API for the evaluation framework of classifiers (github link)
@@ -51,6 +54,8 @@ def evaluate_metric(mtc, y_true, y_pred):
         "fme_mi": lambda: f1_score(y_true, y_pred, average='micro'),
         "prc_mi": lambda: precision_score(y_true, y_pred, average='micro'),
         "rcl_mi": lambda: recall_score(y_true, y_pred, average='micro'),
+        "lgl": lambda: log_loss(y_true, y_pred),
+        "bri": lambda: brier_score_loss(y_true, y_pred),
     }.get(mtc, -1)()
 
 # Evaluate own classifier
@@ -58,7 +63,7 @@ def evaluate_metric(mtc, y_true, y_pred):
 # @returns evaluation for each metric, cnf_matrix and classification report for own classifier
 # @see https://scikit-learn.org/stable/modules/generated/sklearn.metrics.confusion_matrix.html?highlight=confusion%20matrix#,
 # https://scikit-learn.org/stable/modules/generated/sklearn.metrics.classification_report.html?highlight=classification%20report#
-def evaluate_input(metrics, y_true=None, y_pred=None, cnf_matrix=True, clf_report=True):
+def evaluate_input(metrics, y_true=None, y_pred=None, cnf_matrix=True, clf_report=True, metricType="qualitative"):
 
     evaluation = {}
 
@@ -71,9 +76,9 @@ def evaluate_input(metrics, y_true=None, y_pred=None, cnf_matrix=True, clf_repor
         if y_true is not None and y_pred is not None:
             score = evaluate_metric(mtc, y_true, y_pred)
             metric["score_clf_own"] = score
-            if cnf_matrix:
+            if cnf_matrix and metricType=="qualitative":
                 cnf_matrices["cnf_matrix_own"] = confusion_matrix(y_true, y_pred).tolist()
-            if clf_report:
+            if clf_report and metricType=="qualitative":
                 target_names = ["class {0}".format(i) for i in np.unique(y_true)]
                 clf_reports["clf_report_own"] = classification_report(y_true, y_pred, output_dict=True, target_names=target_names)
             evaluation[mtc] = metric
@@ -127,6 +132,32 @@ def compare_clfs(clfs, metrics, dataset, k, train_indices, test_indices, y_pred_
             clf_scores_dict["average_{0}".format(mtc)]["score_clf_{0}".format(clf)] = sum(evaluation_dict[clf][mtc]) / len(evaluation_dict[clf][mtc])
 
     return (evaluation_dict, list(clf_scores_dict.values()))
+
+# Calculate data for roc curve plot
+# @params y_true (true labels), y_proba (probabilities of labels shape (labels, n_classes)), n_classes (number of unique classes)
+# @returns roc curve data (fpr, tpr, thresholds) and auc for each class
+# @see https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_curve.html
+def plot_multiclass_roc(y_true, y_proba, n_classes):
+    # structures
+    fpr = dict()
+    tpr = dict()
+    thresholds = dict()
+    roc_auc = dict()
+
+    # calculate dummies once
+    y_test_dummies = pd.get_dummies(y_true, drop_first=False).values
+    for i in range(n_classes):
+        fpr[i], tpr[i], thresholds[i] = roc_curve(y_test_dummies[:, i], y_proba[:, i])
+        roc_auc[i] = auc(fpr[i], tpr[i])
+    
+    roc = []
+    for i in range(n_classes):
+        roc_class = []
+        for j in range(min(len(fpr[i]), len(tpr[i]))):
+            roc_value = {"fpr": fpr[i][j], "tpr": tpr[i][j], "threshold": thresholds[i][j]}
+            roc_class.append(roc_value)
+        roc.append(roc_class)
+    return {"roc": roc, "roc_auc": roc_auc}
 
 def generate_5x2cv(X, y):
     train_indices = []
