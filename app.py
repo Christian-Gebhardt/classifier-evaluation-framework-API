@@ -1,5 +1,7 @@
 from flask import Flask, request, send_file
 from flask_cors import CORS
+from pandas.io.parsers import read_csv
+from scipy.sparse import data
 from evaluation_service import *
 import pandas as pd
 import numpy as np
@@ -68,34 +70,157 @@ def evaluate():
 @app.route("/compare", methods=['GET', 'POST'])
 def compare():
     # Check if all necessary params are in HTTP request
+    # Case all params are present
     if 'y_pred' in request.files and 'train_test_indices' in request.files and request.form.getlist('metrics[]') and \
     'dataset' in request.files and request.form.getlist('classifiers[]'):
         y_pred_file = TemporaryFile()
-        metrics = request.form.getlist('metrics[]')
         request.files['y_pred'].save(y_pred_file)
         _ = y_pred_file.seek(0) # Only needed here to simulate closing & reopening file
-        y_pred = np.load(y_pred_file)
+        y_pred = np.load(y_pred_file, allow_pickle=True)
         dataset_file = TemporaryFile()
         request.files['dataset'].save(dataset_file)
         _ = dataset_file.seek(0) # Only needed here to simulate closing & reopening file
+
         dataset = pd.read_csv(dataset_file).to_numpy()
+
+        metrics = request.form.getlist('metrics[]')
         comp_clfs= request.form.getlist('classifiers[]')
+
+
+        classifier_settings = dict()
+        for key in comp_clfs:
+            classifier_settings[key] = {}
+
+        for key, value in request.form.to_dict().items(): 
+            if 'classifier_settings' in key:
+                keys = key.split('.')
+                if not keys[1] in classifier_settings.keys():
+                    classifier_settings[keys[1]] = {}
+                else:
+                    if keys[2] in str(['alpha']):
+                        classifier_settings[keys[1]][keys[2]] = float(value)
+                    elif keys[2] in str(['min_samples_split', 'max_iter', 'n_estimators']):
+                        classifier_settings[keys[1]][keys[2]] = int(value)
+                    elif keys[2] in str(['max_features']) and value == 'None':
+                        classifier_settings[keys[1]][keys[2]] = None
+                    elif keys[2] in str(['hidden_layer_sizes']):
+                        layers = [int(x) for x in value.split(',')]
+                        classifier_settings[keys[1]][keys[2]] = tuple(layers)
+                    else:
+                        classifier_settings[keys[1]][keys[2]] = value
 
         train_test_indices_file = TemporaryFile()
         request.files['train_test_indices'].save(train_test_indices_file)
         _ = train_test_indices_file.seek(0) # Only needed here to simulate closing & reopening file
-        train_test_indices = np.load(train_test_indices_file)
+        train_test_indices = np.load(train_test_indices_file, allow_pickle=True)
+
+        train_indices = train_test_indices['train_indices']
+        test_indices = train_test_indices['test_indices']
+
+
+        k = len(train_indices)
+
+        print(train_indices, test_indices, k, y_pred, dataset, metrics, comp_clfs, classifier_settings)
+
+        evaluation, results = compare_clfs(comp_clfs, metrics, dataset, k, train_indices, test_indices, classifier_settings, y_pred)
+        return { "evaluation": evaluation, "results": results }
+    
+    # Case all params, exept y_pred are present
+    elif 'train_test_indices' in request.files and request.form.getlist('metrics[]') and \
+    'dataset' in request.files and request.form.getlist('classifiers[]'):
+        dataset_file = TemporaryFile()
+        request.files['dataset'].save(dataset_file)
+        _ = dataset_file.seek(0) # Only needed here to simulate closing & reopening file
+
+        dataset = pd.read_csv(dataset_file).to_numpy()
+
+        metrics = request.form.getlist('metrics[]')
+        comp_clfs= request.form.getlist('classifiers[]')
+
+
+        train_test_indices_file = TemporaryFile()
+        request.files['train_test_indices'].save(train_test_indices_file)
+        _ = train_test_indices_file.seek(0) # Only needed here to simulate closing & reopening file
+        train_test_indices = np.load(train_test_indices_file, allow_pickle=True)
 
         train_indices = train_test_indices['train_indices']
         test_indices = train_test_indices['test_indices']
 
         k = len(train_indices)
 
-        evaluation, results = compare_clfs(comp_clfs, metrics, dataset, k, train_indices, test_indices, y_pred)
+        classifier_settings = dict()
+        for key in comp_clfs:
+            classifier_settings[key] = {}
+
+        for key, value in request.form.to_dict().items(): 
+            if 'classifier_settings' in key:
+                keys = key.split('.')
+                if not keys[1] in classifier_settings.keys():
+                    classifier_settings[keys[1]] = {}
+                else:
+                    if keys[2] in str(['alpha']):
+                        classifier_settings[keys[1]][keys[2]] = float(value)
+                    elif keys[2] in str(['min_samples_split', 'max_iter', 'n_estimators']):
+                        classifier_settings[keys[1]][keys[2]] = int(value)
+                    elif keys[2] in str(['max_features']) and value == 'None':
+                        classifier_settings[keys[1]][keys[2]] = None
+                    elif keys[2] in str(['hidden_layer_sizes']):
+                        layers = [int(x) for x in value.split(',')]
+                        classifier_settings[keys[1]][keys[2]] = tuple(layers)
+                    else:
+                        classifier_settings[keys[1]][keys[2]] = value
+
+        print(train_indices, test_indices, k, dataset, metrics, comp_clfs, classifier_settings)
+
+        evaluation, results = compare_clfs(comp_clfs, metrics, dataset, k, train_indices, test_indices, classifier_settings)
+        return { "evaluation": evaluation, "results": results }
+
+    # Case all params, exept y_pred and train_test_indices are present
+    elif request.form.getlist('metrics[]') and 'dataset' in request.files and request.form.getlist('classifiers[]'):
+        dataset_file = TemporaryFile()
+        request.files['dataset'].save(dataset_file)
+        _ = dataset_file.seek(0) # Only needed here to simulate closing & reopening file
+
+        dataset = pd.read_csv(dataset_file).to_numpy()
+
+        metrics = request.form.getlist('metrics[]')
+        comp_clfs= request.form.getlist('classifiers[]')
+
+        X, y = split_X_y(dataset)
+
+        train_indices, test_indices = generate_5x2cv(X, y)
+
+        k = len(train_indices)
+
+        classifier_settings = dict()
+        for key in comp_clfs:
+            classifier_settings[key] = {}
+
+        for key, value in request.form.to_dict().items(): 
+            if 'classifier_settings' in key:
+                keys = key.split('.')
+                if not keys[1] in classifier_settings.keys():
+                    classifier_settings[keys[1]] = {}
+                else:
+                    if keys[2] in str(['alpha']):
+                        classifier_settings[keys[1]][keys[2]] = float(value)
+                    elif keys[2] in str(['min_samples_split', 'max_iter', 'n_estimators']):
+                        classifier_settings[keys[1]][keys[2]] = int(value)
+                    elif keys[2] in str(['max_features']) and value == 'None':
+                        classifier_settings[keys[1]][keys[2]] = None
+                    elif keys[2] in str(['hidden_layer_sizes']):
+                        layers = [int(x) for x in value.split(',')]
+                        classifier_settings[keys[1]][keys[2]] = tuple(layers)
+                    else:
+                        classifier_settings[keys[1]][keys[2]] = value
+
+        print(train_indices, test_indices, k, dataset, metrics, comp_clfs, classifier_settings)
+
+        evaluation, results = compare_clfs(comp_clfs, metrics, dataset, k, train_indices, test_indices, classifier_settings)
         return { "evaluation": evaluation, "results": results }
         # Case wrong params
     else:
-        return { "message": "Incorrect parameters, mandatory params are: y_pred.npy, train_test_indices.npz, dataset.csv, metrics (list), classifiers (list)"}
+        return { "message": "Incorrect parameters, mandatory params are: dataset.csv, metrics (list), classifiers (list), classifier_settings (dict)"}
 
 # Not as feature in webapp, maybe in later versions.
 @app.route("/generateIndices", methods=['GET', 'POST'])

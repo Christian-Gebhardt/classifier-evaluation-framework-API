@@ -1,4 +1,3 @@
-from tempfile import TemporaryFile
 from sklearn.linear_model import SGDClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
@@ -27,13 +26,14 @@ def split_X_y(dataset):
 # @params keyword clf for each classifier
 # @returns instance of classifier or -1 if non existent
 # @see https://scikit-learn.org/stable/supervised_learning.html
-def map_classifier(clf):
+def map_classifier(clf, settings):
+    print("Classifer {0} with settings {1} created.".format(clf, settings))
     return {
-        "sgd": lambda: SGDClassifier(loss="hinge", penalty="l2", max_iter=10000),
-        "gnb": lambda: GaussianNB(),
-        "dct": lambda: DecisionTreeClassifier(),
-        "rfo": lambda: RandomForestClassifier(),
-        "nnm": lambda: MLPClassifier(hidden_layer_sizes=(32, 16)),
+        "sgd": lambda: SGDClassifier(**settings),
+        "gnb": lambda: GaussianNB(**settings),
+        "dct": lambda: DecisionTreeClassifier(**settings),
+        "rfo": lambda: RandomForestClassifier(**settings),
+        "nnm": lambda: MLPClassifier(**settings),
            }.get(clf, -1)
 
 # Calculate metrics score
@@ -93,7 +93,7 @@ def evaluate_input(metrics, y_true=None, y_pred=None, cnf_matrix=True, clf_repor
 # test_indices (numpy array), y_pred (numpy array, results of own classifier, all y_pred vectors stacked)
 # @returns 
 # @see also https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html?highlight=stratified%20k%20fold#sklearn.model_selection.StratifiedKFold
-def compare_clfs(clfs, metrics, dataset, k, train_indices, test_indices, y_pred_arr=None):
+def compare_clfs(clfs, metrics, dataset, k, train_indices, test_indices, classifier_settings, y_pred_arr=None):
     X, y = split_X_y(dataset)
     classifier_dict = {}
     evaluation_dict = {}
@@ -111,7 +111,7 @@ def compare_clfs(clfs, metrics, dataset, k, train_indices, test_indices, y_pred_
                 evaluation_dict["own"][mtc].append(score)
             
     for clf in clfs:
-        clf_call = map_classifier(clf)
+        clf_call = map_classifier(clf, classifier_settings[clf])
         if clf_call != -1:
             classifier_dict[clf] = clf_call()
             evaluation_dict[clf] = {}
