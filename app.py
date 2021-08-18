@@ -70,7 +70,7 @@ def evaluate():
 @app.route("/compare", methods=['GET', 'POST'])
 def compare():
     # Check if all mandatory params are in HTTP request and parse them
-    if request.form.getlist('metrics[]') and 'dataset' in request.files and request.form.getlist('classifiers[]'):
+    if request.form.getlist('metrics[]') and 'dataset' in request.files:
         dataset = None
         dataset_file = TemporaryFile()
         # Case dataset filetype is csv, it is assummed that the first row contains headers (label in last column)
@@ -87,7 +87,10 @@ def compare():
             return {"message": "Dataset filetype is not supported. Only .csv and .npy files are supported."}
 
         metrics = request.form.getlist('metrics[]')
-        comp_clfs= request.form.getlist('classifiers[]')
+
+        comp_clfs = []
+        if request.form.getlist('classifiers[]'):
+            comp_clfs= request.form.getlist('classifiers[]')
 
         classifier_settings = dict()
         for key in comp_clfs:
@@ -146,7 +149,7 @@ def compare():
         elif 'train_test_indices' in request.files:
             train_test_indices = None
             train_test_indices_file = TemporaryFile()
-            
+
             if '.npz' in request.files['train_test_indices'].filename:
                 request.files['train_test_indices'].save(train_test_indices_file)
                 _ = train_test_indices_file.seek(0) # Only needed here to simulate closing & reopening file
