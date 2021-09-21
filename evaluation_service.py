@@ -7,7 +7,6 @@ from sklearn.metrics import *
 from sklearn.model_selection import StratifiedKFold
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 ''' @author Christian Gebhardt, christian.gebhardt@uni-bayreuth.de
 This is the evaluation_service.py file, all computations that are needed for API for the evaluation framework of classifiers (github link)
@@ -159,6 +158,9 @@ def plot_multiclass_roc(y_true, y_proba, n_classes):
         roc.append(roc_class)
     return {"roc": roc, "roc_auc": roc_auc}
 
+# Generate 5x2 cross validation indices
+# @params feature matrix X and label vector y
+# @returns a tuple containing np arrays of train and test indices
 def generate_5x2cv(X, y):
     train_indices = []
     test_indices = []
