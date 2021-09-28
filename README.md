@@ -1,5 +1,9 @@
 # classifier-evaluation-framework-API
 
+### @author Christian Gebhardt, email: christian.gebhardt@uni-bayreuth.de
+
+You will need to have pip and python 3 installed to run these commands.
+
 ## Available Scripts
 
 In the project directory, you can run:
